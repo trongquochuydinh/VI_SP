@@ -33,6 +33,19 @@ This project is a Dash + Plotly dashboard tailored to your prepared attendance d
 - `helpers.py`: data loading, preprocessing, filtering, metrics, and figure builders.
 - `constants.py`: shared component IDs, view keys, and defaults.
 
+```mermaid
+flowchart TD
+    A["run.py<br/>Entry Point"] --> B["app.py<br/>Create Dash App"]
+    B --> C["layout.py<br/>build_layout()"]
+    B --> D["callbacks.py<br/>register_callbacks(app)"]
+    C --> E["constants.py<br/>IDs, defaults, labels"]
+    D --> E
+    D --> F["helpers.py<br/>data/filter/figure utils"]
+    F --> G[("Data Source<br/>XLSX")]
+    D --> H["Plotly Figure"]
+    H --> I["Dash UI Graph Components"]
+```
+
 ## Run locally
 
 1. Check python version (>=3.9):
