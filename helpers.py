@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from pathlib import Path
+from typing import Callable
 
 import pandas as pd
 import plotly.express as px
@@ -17,6 +19,25 @@ from constants import (
 )
 
 
+@dataclass(frozen=True)
+class ChartSpec:
+    df: pd.DataFrame
+    x: str | None
+    y: str | None
+    title: str
+    labels: dict[str, str]
+    color: str | None = None
+    size: str | None = None
+    hover_data: list[str] | None = None
+    markers: bool | None = None
+    opacity: float | None = None
+
+
+@dataclass(frozen=True)
+class ViewSpec:
+    by_chart_type: dict[str, ChartSpec]
+
+
 def load_data(file_path: str | None = None, sheet_name: str = DEFAULT_SHEET_NAME) -> pd.DataFrame:
     target = Path(file_path or DEFAULT_DATA_FILE)
     if target.exists() and target.suffix.lower() in {".xlsx", ".xls"}:
@@ -29,6 +50,7 @@ def load_data(file_path: str | None = None, sheet_name: str = DEFAULT_SHEET_NAME
     return preprocess_attendance_data(df)
 
 
+# Fallback function to generate demo data
 def build_demo_data() -> pd.DataFrame:
     return pd.DataFrame(
         {
@@ -199,18 +221,20 @@ def _final_grade_frame(df: pd.DataFrame) -> pd.DataFrame:
     return graded
 
 
-def build_operational_figure(df: pd.DataFrame, view: str, chart_type: str):
-    if df.empty:
-        return _empty_figure("No data for selected filters")
+def prepare_attendance_vs_grade(df: pd.DataFrame) -> ViewSpec:
+    graded = _final_grade_frame(df)
+    if graded.empty:
+        raise ValueError("No final_grade data available for selected filters")
 
-    if view == VIEW_ATTENDANCE_EXAM_CORRELATION:
-        graded = _final_grade_frame(df)
-        if graded.empty:
-            return _empty_figure("No final_grade data available for selected filters")
+    grouped = (
+        graded.groupby("final_grade", as_index=False)
+        .agg(avg_attendance=("total_attendance", "mean"), rows=("student_id", "count"))
+    )
 
-        if chart_type == CHART_TYPE_BOX:
-            fig = px.box(
-                graded,
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_BOX: ChartSpec(
+                df=graded,
                 x="final_grade",
                 y="total_attendance",
                 title="Attendance vs Final Grade",
@@ -218,77 +242,133 @@ def build_operational_figure(df: pd.DataFrame, view: str, chart_type: str):
                     "total_attendance": "Total attendance (0-13)",
                     "final_grade": "Final grade",
                 },
-            )
-        elif chart_type == CHART_TYPE_LINE:
-            grouped = (
-                graded.groupby("final_grade", as_index=False)
-                .agg(avg_attendance=("total_attendance", "mean"), rows=("student_id", "count"))
-            )
-            fig = px.line(
-                grouped,
+            ),
+            CHART_TYPE_LINE: ChartSpec(
+                df=grouped,
                 x="final_grade",
                 y="avg_attendance",
-                markers=True,
-                hover_data=["rows"],
                 title="Attendance vs Final Grade",
                 labels={
                     "final_grade": "Final grade",
                     "avg_attendance": "Average attendance",
                 },
-            )
-        else:
-            fig = px.scatter(
-                graded,
+                markers=True,
+                hover_data=["rows"],
+            ),
+            CHART_TYPE_SCATTER: ChartSpec(
+                df=graded,
                 x="total_attendance",
                 y="final_grade",
-                color="class",
-                opacity=0.7,
                 title="Attendance vs Final Grade",
                 labels={
                     "total_attendance": "Total attendance (0-13)",
                     "final_grade": "Final grade",
                     "class": "Class",
                 },
-            )
-    elif view == VIEW_ATTENDANCE_DISTRIBUTION:
-        grouped = (
-            df.groupby("total_attendance", as_index=False)
-            .agg(rows=("student_id", "count"))
-            .sort_values("total_attendance")
-        )
-        if chart_type == CHART_TYPE_BOX:
-            fig = px.box(
-                df,
+                color="class",
+                opacity=0.7,
+            ),
+        }
+    )
+
+
+def prepare_attendance_distribution(df: pd.DataFrame) -> ViewSpec:
+    grouped = (
+        df.groupby("total_attendance", as_index=False)
+        .agg(rows=("student_id", "count"))
+        .sort_values("total_attendance")
+    )
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_BOX: ChartSpec(
+                df=df,
+                x=None,
                 y="total_attendance",
                 title="Attendance Distribution",
                 labels={"total_attendance": "Total attendance (0-13)"},
-            )
-        elif chart_type == CHART_TYPE_LINE:
-            fig = px.line(
-                grouped,
+            ),
+            CHART_TYPE_LINE: ChartSpec(
+                df=grouped,
                 x="total_attendance",
                 y="rows",
+                title="Attendance Distribution",
+                labels={
+                    "total_attendance": "Total attendance (0-13)",
+                    "rows": "Students",
+                },
                 markers=True,
-                title="Attendance Distribution",
-                labels={
-                    "total_attendance": "Total attendance (0-13)",
-                    "rows": "Students",
-                },
-            )
-        else:
-            fig = px.scatter(
-                grouped,
+            ),
+            CHART_TYPE_SCATTER: ChartSpec(
+                df=grouped,
                 x="total_attendance",
                 y="rows",
-                size="rows",
                 title="Attendance Distribution",
                 labels={
                     "total_attendance": "Total attendance (0-13)",
                     "rows": "Students",
                 },
-            )
-    else:
+                size="rows",
+            ),
+        }
+    )
+
+
+def build_chart(spec: ChartSpec, chart_type: str) -> go.Figure:
+    renderer = {
+        CHART_TYPE_SCATTER: px.scatter,
+        CHART_TYPE_BOX: px.box,
+        CHART_TYPE_LINE: px.line,
+    }.get(chart_type, px.scatter)
+
+    kwargs: dict[str, object] = {
+        "data_frame": spec.df,
+        "title": spec.title,
+        "labels": spec.labels,
+    }
+    if spec.x is not None:
+        kwargs["x"] = spec.x
+    if spec.y is not None:
+        kwargs["y"] = spec.y
+    if spec.color is not None:
+        kwargs["color"] = spec.color
+    if spec.size is not None:
+        kwargs["size"] = spec.size
+    if spec.hover_data is not None:
+        kwargs["hover_data"] = spec.hover_data
+    if spec.markers is not None:
+        kwargs["markers"] = spec.markers
+    if spec.opacity is not None:
+        kwargs["opacity"] = spec.opacity
+
+    return renderer(**kwargs)
+
+
+VIEW_PREPARERS: dict[str, Callable[[pd.DataFrame], ViewSpec]] = {
+    VIEW_ATTENDANCE_EXAM_CORRELATION: prepare_attendance_vs_grade,
+    VIEW_ATTENDANCE_DISTRIBUTION: prepare_attendance_distribution,
+}
+
+
+def build_operational_figure(df: pd.DataFrame, view: str, chart_type: str):
+    if df.empty:
+        return _empty_figure("No data for selected filters")
+
+    preparer = VIEW_PREPARERS.get(view)
+    if preparer is None:
         return _empty_figure("Unsupported view selected")
+
+    try:
+        view_spec = preparer(df)
+    except ValueError as exc:
+        return _empty_figure(str(exc))
+
+    selected_chart_type = chart_type if chart_type in view_spec.by_chart_type else CHART_TYPE_SCATTER
+    spec = view_spec.by_chart_type.get(selected_chart_type)
+    if spec is None:
+        return _empty_figure("Unsupported chart type selected")
+
+    fig = build_chart(spec, selected_chart_type)
 
     fig.update_layout(template="plotly_white", margin={"l": 24, "r": 24, "t": 60, "b": 24})
     return fig
