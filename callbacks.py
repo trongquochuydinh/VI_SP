@@ -15,6 +15,7 @@ from constants import (
     ID_VIEW_SELECTOR,
     ID_YEAR_FILTER,
 )
+
 from helpers import (
     build_kpis,
     build_operational_figure,
@@ -22,7 +23,9 @@ from helpers import (
     records_to_dataframe,
 )
 
+# region Callbacks
 
+# Callback to update the main graph and KPIs based on filters and view selection/change
 def register_callbacks(app):
     @app.callback(
         Output(ID_MAIN_GRAPH, "figure"),
@@ -46,3 +49,5 @@ def register_callbacks(app):
         fig = build_operational_figure(df_filtered, view, chart_type)
         students_text, attendance_text, participation_text, displayed_text = build_kpis(df_filtered, df_all)
         return fig, students_text, attendance_text, participation_text, displayed_text
+
+# endregion
