@@ -216,3 +216,7 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Custom ignore rules
+attendance_merged_evaluated_only.xlsx
+*DS_Store
