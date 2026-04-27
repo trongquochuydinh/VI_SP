@@ -35,6 +35,18 @@ This project is a Dash + Plotly dashboard tailored to your prepared attendance d
 
 ## Run locally
 
+1. Check python version (>=3.9):
+```bash
+python --version
+```
+
+2. Make a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate (for Unix)
+venv\Scripts\activate (for Windows)
+```
+
 1. Install dependencies:
 
 ```bash
