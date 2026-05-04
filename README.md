@@ -4,8 +4,10 @@ This project is a Dash + Plotly dashboard tailored to your prepared attendance d
 
 ## Data Source
 
-- Default file: `attendance_merged_evaluated_only.xlsx`
-- Default sheet: `attendance`
+Place your prepared workbook in the **project root** and use the default name below (the path is resolved relative to the shell's current working directory, so run `python run.py` from the repo root after you add the file). If the file is missing or not a readable Excel workbook, the dashboard still starts using a **small built-in demo dataset**—replace the file with your real export to see your cohort.
+
+- **Default file:** `attendance_merged_evaluated_only.xlsx` (not tracked in git; add it locally)
+- **Default sheet:** `attendance`
 - Main columns used:
   - grouping/filtering: `academic_year`, `class`, `day`, `exam_attempt`
   - attendance signal: `week_1` ... `week_13`, `total_attendance`
@@ -60,13 +62,13 @@ source venv/bin/activate (for Unix)
 venv\Scripts\activate (for Windows)
 ```
 
-1. Install dependencies:
+3. Install dependencies:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-2. Start the app:
+4. Start the app (ensure `attendance_merged_evaluated_only.xlsx` is in the project root if you want live data; see **Data Source** above):
 
 ```bash
 python run.py
