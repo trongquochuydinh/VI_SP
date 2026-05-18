@@ -4,19 +4,28 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
+import numpy as np
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
 
 from constants import (
+    CHART_TYPE_BAR,
     CHART_TYPE_BOX,
     CHART_TYPE_LINE,
     CHART_TYPE_SCATTER,
     DEFAULT_DATA_FILE,
     DEFAULT_SHEET_NAME,
+    VIEW_ATTEMPTS_VS_ATTENDANCE,
     VIEW_ATTENDANCE_DISTRIBUTION,
     VIEW_ATTENDANCE_EXAM_CORRELATION,
+    VIEW_PASS_RATE_BY_BRACKET,
+    VIEW_POINTS_VS_ATTENDANCE,
 )
+
+PASSING_GRADES = {"1", "2", "3", "4", "S"}
+ATTENDANCE_BRACKET_ORDER = ["0-3", "4-6", "7-9", "10-13"]
+OUTCOME_ORDER = ["Passed 1st attempt", "Passed (multiple attempts)", "Did not pass"]
 
 
 @dataclass(frozen=True)
@@ -31,6 +40,9 @@ class ChartSpec:
     hover_data: list[str] | None = None
     markers: bool | None = None
     opacity: float | None = None
+    trendline: bool = False
+    category_orders: dict | None = None
+    barmode: str | None = None
 
 
 @dataclass(frozen=True)
@@ -314,11 +326,250 @@ def prepare_attendance_distribution(df: pd.DataFrame) -> ViewSpec:
     )
 
 
+def _attendance_bracket(attendance: int) -> str:
+    if attendance <= 3:
+        return "0-3"
+    if attendance <= 6:
+        return "4-6"
+    if attendance <= 9:
+        return "7-9"
+    return "10-13"
+
+
+def _student_outcomes(df: pd.DataFrame) -> pd.DataFrame:
+    if "student_id" not in df.columns or "final_grade" not in df.columns:
+        return pd.DataFrame()
+
+    work = df.copy()
+    work["final_grade"] = work["final_grade"].astype(str).str.strip().str.upper()
+    work["is_pass"] = work["final_grade"].isin(PASSING_GRADES)
+    work["attempt_num"] = pd.to_numeric(work["exam_attempt"], errors="coerce")
+
+    rows = []
+    for student_id, group in work.groupby("student_id"):
+        attendance = int(group["total_attendance"].max())
+        passed = group[group["is_pass"]]
+        if passed.empty:
+            outcome = "Did not pass"
+        else:
+            min_attempt = passed["attempt_num"].min()
+            if pd.isna(min_attempt) or int(min_attempt) != 1:
+                outcome = "Passed (multiple attempts)"
+            else:
+                outcome = "Passed 1st attempt"
+        rows.append({"student_id": student_id, "total_attendance": attendance, "outcome": outcome})
+
+    return pd.DataFrame(rows)
+
+
+def prepare_attempts_vs_attendance(df: pd.DataFrame) -> ViewSpec:
+    work = df.copy()
+    work["exam_attempt_num"] = pd.to_numeric(work["exam_attempt"], errors="coerce")
+    work = work[work["exam_attempt_num"] > 0].copy()
+    if work.empty:
+        raise ValueError("No exam-attempt data for selected filters")
+    work["exam_attempt_num"] = work["exam_attempt_num"].astype(int)
+    work["attempt_label"] = work["exam_attempt_num"].astype(str)
+
+    grouped = (
+        work.groupby("exam_attempt_num", as_index=False)
+        .agg(avg_attendance=("total_attendance", "mean"), rows=("student_id", "count"))
+        .sort_values("exam_attempt_num")
+    )
+
+    attempt_order = sorted(work["attempt_label"].unique(), key=int)
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_BOX: ChartSpec(
+                df=work,
+                x="attempt_label",
+                y="total_attendance",
+                title="Attendance by number of exam attempts",
+                labels={
+                    "attempt_label": "Exam attempt #",
+                    "total_attendance": "Total attendance (0-13)",
+                },
+                category_orders={"attempt_label": attempt_order},
+            ),
+            CHART_TYPE_LINE: ChartSpec(
+                df=grouped,
+                x="exam_attempt_num",
+                y="avg_attendance",
+                title="Average attendance by number of exam attempts",
+                labels={
+                    "exam_attempt_num": "Exam attempt #",
+                    "avg_attendance": "Average attendance",
+                },
+                markers=True,
+                hover_data=["rows"],
+            ),
+            CHART_TYPE_SCATTER: ChartSpec(
+                df=work,
+                x="exam_attempt_num",
+                y="total_attendance",
+                title="Attendance by number of exam attempts",
+                labels={
+                    "exam_attempt_num": "Exam attempt #",
+                    "total_attendance": "Total attendance (0-13)",
+                    "class": "Class",
+                },
+                color="class",
+                opacity=0.7,
+            ),
+        }
+    )
+
+
+def prepare_pass_rate_by_bracket(df: pd.DataFrame) -> ViewSpec:
+    students = _student_outcomes(df)
+    if students.empty:
+        raise ValueError("No student outcome data for selected filters")
+
+    students["bracket"] = students["total_attendance"].apply(_attendance_bracket)
+
+    counts = students.groupby(["bracket", "outcome"]).size().reset_index(name="count")
+    totals = students.groupby("bracket").size().reset_index(name="total")
+    merged = counts.merge(totals, on="bracket")
+    merged["percent"] = merged["count"] / merged["total"] * 100
+
+    full_index = pd.MultiIndex.from_product(
+        [ATTENDANCE_BRACKET_ORDER, OUTCOME_ORDER], names=["bracket", "outcome"]
+    )
+    merged = (
+        merged.set_index(["bracket", "outcome"])
+        .reindex(full_index, fill_value=0)
+        .reset_index()
+    )
+    merged["bracket"] = pd.Categorical(merged["bracket"], categories=ATTENDANCE_BRACKET_ORDER, ordered=True)
+    merged["outcome"] = pd.Categorical(merged["outcome"], categories=OUTCOME_ORDER, ordered=True)
+    merged = merged.sort_values(["bracket", "outcome"])
+
+    common_labels = {
+        "bracket": "Attendance bracket (weeks attended)",
+        "percent": "Students (%)",
+        "outcome": "Outcome",
+    }
+    category_orders = {"bracket": ATTENDANCE_BRACKET_ORDER, "outcome": OUTCOME_ORDER}
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_BAR: ChartSpec(
+                df=merged,
+                x="bracket",
+                y="percent",
+                color="outcome",
+                title="Pass rate by attendance bracket",
+                labels=common_labels,
+                hover_data=["count", "total"],
+                category_orders=category_orders,
+                barmode="group",
+            ),
+            CHART_TYPE_LINE: ChartSpec(
+                df=merged,
+                x="bracket",
+                y="percent",
+                color="outcome",
+                title="Pass rate by attendance bracket",
+                labels=common_labels,
+                hover_data=["count", "total"],
+                markers=True,
+                category_orders=category_orders,
+            ),
+        }
+    )
+
+
+def prepare_points_vs_attendance(df: pd.DataFrame) -> ViewSpec:
+    if "final_points" not in df.columns:
+        raise ValueError("No final_points column available")
+
+    work = df.dropna(subset=["final_points"]).copy()
+    if work.empty:
+        raise ValueError("No final_points data for selected filters")
+
+    grouped = (
+        work.groupby("total_attendance", as_index=False)
+        .agg(avg_points=("final_points", "mean"), rows=("student_id", "count"))
+        .sort_values("total_attendance")
+    )
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_SCATTER: ChartSpec(
+                df=work,
+                x="total_attendance",
+                y="final_points",
+                title="Final points vs attendance (with OLS trendline)",
+                labels={
+                    "total_attendance": "Total attendance (0-13)",
+                    "final_points": "Final points",
+                    "class": "Class",
+                },
+                color="class",
+                opacity=0.7,
+                trendline=True,
+            ),
+            CHART_TYPE_BOX: ChartSpec(
+                df=work,
+                x="total_attendance",
+                y="final_points",
+                title="Final points distribution by attendance",
+                labels={
+                    "total_attendance": "Total attendance (0-13)",
+                    "final_points": "Final points",
+                },
+            ),
+            CHART_TYPE_LINE: ChartSpec(
+                df=grouped,
+                x="total_attendance",
+                y="avg_points",
+                title="Average final points by attendance",
+                labels={
+                    "total_attendance": "Total attendance (0-13)",
+                    "avg_points": "Average final points",
+                },
+                markers=True,
+                hover_data=["rows"],
+            ),
+        }
+    )
+
+
+def _add_ols_trendline(fig: go.Figure, spec: ChartSpec) -> None:
+    if not (spec.x and spec.y):
+        return
+    x_vals = pd.to_numeric(spec.df[spec.x], errors="coerce")
+    y_vals = pd.to_numeric(spec.df[spec.y], errors="coerce")
+    mask = x_vals.notna() & y_vals.notna()
+    if mask.sum() < 2:
+        return
+    x = x_vals[mask].to_numpy(dtype=float)
+    y = y_vals[mask].to_numpy(dtype=float)
+    slope, intercept = np.polyfit(x, y, 1)
+    x_line = np.array([x.min(), x.max()])
+    y_line = slope * x_line + intercept
+    y_pred = slope * x + intercept
+    ss_res = float(((y - y_pred) ** 2).sum())
+    ss_tot = float(((y - y.mean()) ** 2).sum())
+    r2 = 1 - ss_res / ss_tot if ss_tot > 0 else 0.0
+    fig.add_trace(
+        go.Scatter(
+            x=x_line,
+            y=y_line,
+            mode="lines",
+            name=f"OLS (slope={slope:.2f}, R²={r2:.2f})",
+            line={"color": "black", "dash": "dash"},
+        )
+    )
+
+
 def build_chart(spec: ChartSpec, chart_type: str) -> go.Figure:
     renderer = {
         CHART_TYPE_SCATTER: px.scatter,
         CHART_TYPE_BOX: px.box,
         CHART_TYPE_LINE: px.line,
+        CHART_TYPE_BAR: px.bar,
     }.get(chart_type, px.scatter)
 
     kwargs: dict[str, object] = {
@@ -340,13 +591,25 @@ def build_chart(spec: ChartSpec, chart_type: str) -> go.Figure:
         kwargs["markers"] = spec.markers
     if spec.opacity is not None:
         kwargs["opacity"] = spec.opacity
+    if spec.category_orders is not None:
+        kwargs["category_orders"] = spec.category_orders
+    if spec.barmode is not None and chart_type == CHART_TYPE_BAR:
+        kwargs["barmode"] = spec.barmode
 
-    return renderer(**kwargs)
+    fig = renderer(**kwargs)
+
+    if spec.trendline and chart_type == CHART_TYPE_SCATTER:
+        _add_ols_trendline(fig, spec)
+
+    return fig
 
 
 VIEW_PREPARERS: dict[str, Callable[[pd.DataFrame], ViewSpec]] = {
     VIEW_ATTENDANCE_EXAM_CORRELATION: prepare_attendance_vs_grade,
     VIEW_ATTENDANCE_DISTRIBUTION: prepare_attendance_distribution,
+    VIEW_ATTEMPTS_VS_ATTENDANCE: prepare_attempts_vs_attendance,
+    VIEW_PASS_RATE_BY_BRACKET: prepare_pass_rate_by_bracket,
+    VIEW_POINTS_VS_ATTENDANCE: prepare_points_vs_attendance,
 }
 
 
@@ -363,10 +626,13 @@ def build_operational_figure(df: pd.DataFrame, view: str, chart_type: str):
     except ValueError as exc:
         return _empty_figure(str(exc))
 
-    selected_chart_type = chart_type if chart_type in view_spec.by_chart_type else CHART_TYPE_SCATTER
-    spec = view_spec.by_chart_type.get(selected_chart_type)
-    if spec is None:
-        return _empty_figure("Unsupported chart type selected")
+    if chart_type in view_spec.by_chart_type:
+        selected_chart_type = chart_type
+    elif CHART_TYPE_SCATTER in view_spec.by_chart_type:
+        selected_chart_type = CHART_TYPE_SCATTER
+    else:
+        selected_chart_type = next(iter(view_spec.by_chart_type))
+    spec = view_spec.by_chart_type[selected_chart_type]
 
     fig = build_chart(spec, selected_chart_type)
 
