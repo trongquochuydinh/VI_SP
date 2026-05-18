@@ -20,23 +20,31 @@ ID_MAIN_GRAPH = "main-graph"
 # Define view constants
 VIEW_ATTENDANCE_DISTRIBUTION = "attendance_distribution"
 VIEW_ATTENDANCE_EXAM_CORRELATION = "attendance_exam_correlation"
+VIEW_ATTEMPTS_VS_ATTENDANCE = "attempts_vs_attendance"
+VIEW_PASS_RATE_BY_BRACKET = "pass_rate_by_bracket"
+VIEW_POINTS_VS_ATTENDANCE = "points_vs_attendance"
 
 # Define view options for the dropdown
 VIEW_OPTIONS = [
     {"label": "Attendance vs Final Grade", "value": VIEW_ATTENDANCE_EXAM_CORRELATION},
     {"label": "Attendance Distribution", "value": VIEW_ATTENDANCE_DISTRIBUTION},
+    {"label": "Exam Attempts vs Attendance", "value": VIEW_ATTEMPTS_VS_ATTENDANCE},
+    {"label": "Pass Rate by Attendance Bracket", "value": VIEW_PASS_RATE_BY_BRACKET},
+    {"label": "Final Points vs Attendance (trendline)", "value": VIEW_POINTS_VS_ATTENDANCE},
 ]
 
 # Define chart type constants
 CHART_TYPE_SCATTER = "scatter"
 CHART_TYPE_BOX = "box"
 CHART_TYPE_LINE = "line"
+CHART_TYPE_BAR = "bar"
 
 # Define chart type options for the dropdown
 CHART_TYPE_OPTIONS = [
     {"label": "Scatter", "value": CHART_TYPE_SCATTER},
     {"label": "Box", "value": CHART_TYPE_BOX},
     {"label": "Line", "value": CHART_TYPE_LINE},
+    {"label": "Bar", "value": CHART_TYPE_BAR},
 ]
 
 # Define default data file and sheet name

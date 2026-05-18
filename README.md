@@ -21,10 +21,28 @@ Place your prepared workbook in the **project root** and use the default name be
   - average attendance
   - exam participation rate
   - displayed rows vs total rows
-- Focus visualization implemented:
-  - correlation between lecture attendance and final grade (`total_attendance` vs `final_grade`)
-  - attendance distribution
-  - chart type selector for both views: scatter, box, line (average)
+- Available views (selectable from the **View** dropdown):
+  - **Attendance vs Final Grade** — distribution of attendance per grade category (`total_attendance` vs `final_grade`).
+  - **Attendance Distribution** — how attendance counts are spread across students.
+  - **Exam Attempts vs Attendance** — attendance broken down by number of exam attempts; direct test of the hypothesis that attendees need fewer attempts.
+  - **Pass Rate by Attendance Bracket** — students bucketed into attendance brackets (0-3, 4-6, 7-9, 10-13) and split into *Passed 1st attempt / Passed (multiple attempts) / Did not pass*. Aggregated per `student_id`.
+  - **Final Points vs Attendance (trendline)** — scatter of `final_points` against attendance with an OLS regression line (slope + R² in the legend, computed via `numpy.polyfit`, no extra dependency).
+- Chart type selector: **scatter**, **box**, **line**, **bar**. Each view declares which chart types it supports; unsupported selections fall back to the view's preferred type.
+- Passing-grade definition (used by the Pass Rate view): `{1, 2, 3, 4, S}` — `S` ("Splnené") is treated as a pass for pass/fail-style records; `N` is treated as failing.
+
+### Per-view defaults (auto-applied on view change)
+
+When the view is switched, the chart type, academic year, exam-attempt, and class filters are snapped to defaults that make each view immediately readable. The user can still override them afterward.
+
+| View | Chart type | Years | Exam attempts | Classes |
+|---|---|---|---|---|
+| Attendance vs Final Grade | box | all | all | all |
+| Attendance Distribution | line | all | all | largest class |
+| Exam Attempts vs Attendance | box | latest only | exclude `Missing` | all |
+| Pass Rate by Attendance Bracket | bar | all | all | all |
+| Final Points vs Attendance | scatter | latest only | exclude `Missing` | largest class with non-null `final_points` |
+
+"Largest class" is recomputed from the loaded data, so it adapts to whatever dataset is dropped in.
 
 ## Architecture
 
@@ -34,19 +52,6 @@ Place your prepared workbook in the **project root** and use the default name be
 - `callbacks.py`: reactive filtering and chart/KPI updates.
 - `helpers.py`: data loading, preprocessing, filtering, metrics, and figure builders.
 - `constants.py`: shared component IDs, view keys, and defaults.
-
-```mermaid
-flowchart TD
-    A["run.py<br/>Entry Point"] --> B["app.py<br/>Create Dash App"]
-    B --> C["layout.py<br/>build_layout()"]
-    B --> D["callbacks.py<br/>register_callbacks(app)"]
-    C --> E["constants.py<br/>IDs, defaults, labels"]
-    D --> E
-    D --> F["helpers.py<br/>data/filter/figure utils"]
-    F --> G[("Data Source<br/>XLSX")]
-    D --> H["Plotly Figure"]
-    H --> I["Dash UI Graph Components"]
-```
 
 ## Run locally
 
