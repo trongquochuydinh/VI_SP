@@ -13,14 +13,17 @@ from constants import (
     CHART_TYPE_BAR,
     CHART_TYPE_BOX,
     CHART_TYPE_LINE,
+    CHART_TYPE_SANKEY,
     CHART_TYPE_SCATTER,
     DEFAULT_DATA_FILE,
     DEFAULT_SHEET_NAME,
+    VIEW_ATTENDANCE_BY_DAY,
     VIEW_ATTEMPTS_VS_ATTENDANCE,
     VIEW_ATTENDANCE_DISTRIBUTION,
     VIEW_ATTENDANCE_EXAM_CORRELATION,
     VIEW_PASS_RATE_BY_BRACKET,
     VIEW_POINTS_VS_ATTENDANCE,
+    VIEW_SANKEY_FLOW,
 )
 
 PASSING_GRADES = {"1", "2", "3", "4", "S"}
@@ -563,8 +566,136 @@ def _add_ols_trendline(fig: go.Figure, spec: ChartSpec) -> None:
         )
     )
 
+def _attendance_bracket_sankey(attendance: int) -> str:
+    if attendance <= 3:
+        return "Attendance: 0-3"
+    if attendance <= 6:
+        return "Attendance: 4-6"
+    if attendance <= 9:
+        return "Attendance: 7-9"
+    return "Attendance: 10-13"
+
+def prepare_sankey_flow(df: pd.DataFrame) -> ViewSpec:
+    if df.empty:
+        raise ValueError("No data available for Sankey diagram")
+        
+    work = df.copy()
+    work["source_bracket"] = work["total_attendance"].apply(_attendance_bracket_sankey)
+    work["target_attempt"] = "Attempt: " + work["exam_attempt_label"].astype(str)
+    
+    work["target_grade"] = work["final_grade"].astype(str).str.strip().str.upper()
+    work.loc[work["target_grade"].isin(["", "NAN", "NONE"]), "target_grade"] = "No Grade"
+    work["target_grade"] = "Grade: " + work["target_grade"]
+
+    color_map = {
+        "Attendance: 0-3": "rgba(219, 68, 85, 0.3)",
+        "Attendance: 4-6": "rgba(244, 180, 0, 0.3)",
+        "Attendance: 7-9": "rgba(66, 133, 244, 0.3)",
+        "Attendance: 10-13": "rgba(15, 157, 88, 0.3)"
+    }
+
+    flow_detailed = work.groupby(["source_bracket", "target_attempt", "target_grade"]).size().reset_index(name="count")
+    
+    f1 = flow_detailed.groupby(["source_bracket", "target_attempt"])["count"].sum().reset_index()
+    f1.columns = ["source", "target", "value"]
+    f1["link_color"] = f1["source"].map(color_map)
+    
+    f2 = flow_detailed.groupby(["source_bracket", "target_attempt", "target_grade"])["count"].sum().reset_index()
+    f2.columns = ["orig_source", "source", "target", "value"]
+    f2["link_color"] = f2["orig_source"].map(color_map)
+
+    attendance_order = ["Attendance: 10-13", "Attendance: 7-9", "Attendance: 4-6", "Attendance: 0-3"]
+    
+    ordered_flows = []
+    for bracket in attendance_order:
+        sub_f1 = f1[f1["source"] == bracket].sort_values(by="target")
+        ordered_flows.append(sub_f1)
+        
+        sub_f2 = f2[f2["orig_source"] == bracket].sort_values(by=["source", "target"])
+        sub_f2_clean = sub_f2.drop(columns=["orig_source"])
+        ordered_flows.append(sub_f2_clean)
+        
+    all_flows = pd.concat(ordered_flows, ignore_index=True)
+
+    attendance_nodes = ["Attendance: 10-13", "Attendance: 7-9", "Attendance: 4-6", "Attendance: 0-3"]
+    other_nodes = sorted(list(set(pd.concat([all_flows["source"], all_flows["target"]])) - set(attendance_nodes)))
+    unique_nodes = attendance_nodes + other_nodes
+    node_indices = {node: idx for idx, node in enumerate(unique_nodes)}
+
+    all_flows["source_idx"] = all_flows["source"].map(node_indices)
+    all_flows["target_idx"] = all_flows["target"].map(node_indices)
+
+    sankey_data = pd.DataFrame({
+        "source": all_flows["source_idx"],
+        "target": all_flows["target_idx"],
+        "value": all_flows["value"],
+        "color": all_flows["link_color"],
+        "node_label": [unique_nodes] * len(all_flows)
+    })
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_SANKEY: ChartSpec(
+                df=sankey_data,
+                x=None,
+                y=None,
+                title="Flow of Students: Attendance ➔ Exam Attempt ➔ Final Grade",
+                labels={}
+            )
+        }
+    )
+
+def prepare_attendance_by_day(df: pd.DataFrame) -> ViewSpec:
+
+    day_order = [
+        "Monday",
+        "Tuesday",
+        "Wednesday",
+        "Thursday",
+        "Friday",
+    ]
+
+    return ViewSpec(
+        by_chart_type={
+            CHART_TYPE_BOX: ChartSpec(
+                df=df,
+                x="day",
+                y="total_attendance",
+                title="Attendance Distribution by Teaching Day",
+                labels={
+                    "day": "Teaching day",
+                    "total_attendance": "Total attendance (0-13)",
+                },
+                category_orders={
+                    "day": day_order
+                },
+            )
+        }
+    )
 
 def build_chart(spec: ChartSpec, chart_type: str) -> go.Figure:
+    if chart_type == CHART_TYPE_SANKEY:
+        node_labels = spec.df["node_label"].iloc[0] if not spec.df.empty else []
+        
+        fig = go.Figure(data=[go.Sankey(
+            arrangement="fixed",
+            node=dict(
+                pad=15,
+                thickness=20,
+                line=dict(color="#A0A0A0", width=0.5),
+                label=node_labels,
+                color="#e5e5e5"
+            ),
+            link=dict(
+                source=spec.df["source"],
+                target=spec.df["target"],
+                value=spec.df["value"],
+                color=spec.df["color"]
+            )
+        )])
+        fig.update_layout(title_text=spec.title, font_size=12)
+        return fig
+    
     renderer = {
         CHART_TYPE_SCATTER: px.scatter,
         CHART_TYPE_BOX: px.box,
@@ -605,11 +736,13 @@ def build_chart(spec: ChartSpec, chart_type: str) -> go.Figure:
 
 
 VIEW_PREPARERS: dict[str, Callable[[pd.DataFrame], ViewSpec]] = {
+    VIEW_ATTENDANCE_BY_DAY: prepare_attendance_by_day,
     VIEW_ATTENDANCE_EXAM_CORRELATION: prepare_attendance_vs_grade,
     VIEW_ATTENDANCE_DISTRIBUTION: prepare_attendance_distribution,
     VIEW_ATTEMPTS_VS_ATTENDANCE: prepare_attempts_vs_attendance,
     VIEW_PASS_RATE_BY_BRACKET: prepare_pass_rate_by_bracket,
     VIEW_POINTS_VS_ATTENDANCE: prepare_points_vs_attendance,
+    VIEW_SANKEY_FLOW: prepare_sankey_flow,
 }
 
 

@@ -4,6 +4,7 @@ from constants import (
     CHART_TYPE_BAR,
     CHART_TYPE_BOX,
     CHART_TYPE_LINE,
+    CHART_TYPE_SANKEY,
     CHART_TYPE_SCATTER,
     ID_ATTENDANCE_RANGE,
     ID_CHART_TYPE_SELECTOR,
@@ -18,11 +19,13 @@ from constants import (
     ID_MAIN_GRAPH,
     ID_VIEW_SELECTOR,
     ID_YEAR_FILTER,
+    VIEW_ATTENDANCE_BY_DAY,
     VIEW_ATTEMPTS_VS_ATTENDANCE,
     VIEW_ATTENDANCE_DISTRIBUTION,
     VIEW_ATTENDANCE_EXAM_CORRELATION,
     VIEW_PASS_RATE_BY_BRACKET,
     VIEW_POINTS_VS_ATTENDANCE,
+    VIEW_SANKEY_FLOW,
 )
 
 from helpers import (
@@ -69,6 +72,20 @@ VIEW_PRESETS = {
         "classes": "largest",
         "classes_require_column": "final_points",
     },
+    VIEW_SANKEY_FLOW: {
+        "chart_type": CHART_TYPE_SANKEY,
+        "years": "all",
+        "attempts": "all",
+        "classes": "largest",
+        "classes_require_column": None,
+    },
+    VIEW_ATTENDANCE_BY_DAY: {
+    "chart_type": CHART_TYPE_BOX,
+    "years": "all",
+    "attempts": "all",
+    "classes": "all",
+    "classes_require_column": None,
+},
 }
 
 # region Callbacks
@@ -129,7 +146,9 @@ def register_callbacks(app):
         else:
             attempts_out = attempt_values
 
-        if preset["classes"] == "largest" and class_values:
+        if view == VIEW_SANKEY_FLOW: 
+            classes_out = ["UPG"]
+        elif preset["classes"] == "largest" and class_values:
             df_all = records_to_dataframe(records)
             require_col = preset.get("classes_require_column")
             if "class" in df_all.columns and not df_all.empty:
