@@ -1,0 +1,733 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Attendance Poster</title>
+  <style>
+    /* ── Variables ─────────────────────────────────────────── */
+    :root {
+      --blue:       #1a3a6b;
+      --blue-mid:   #2558a8;
+      --blue-light: #dce8f8;
+      --accent:     #e8471d;
+      --gold:       #f5a623;
+      --text:       #1a1a2e;
+      --muted:      #5a6270;
+      --white:      #ffffff;
+      --border:     #c8d6e8;
+      --bg:         #f4f7fc;
+
+      --gap:        6px;
+      --pad:        10px;
+      --radius:     6px;
+    }
+
+    /* ── Reset & base ──────────────────────────────────────── */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html { font-size: 10px; }
+    body {
+      font-family: 'Segoe UI', system-ui, sans-serif;
+      color: var(--text);
+      background: #e0e8f4;
+      display: flex;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    /* ── A4 canvas ─────────────────────────────────────────── */
+    .poster {
+      width: 210mm;
+      min-height: 297mm;
+      background: var(--white);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      box-shadow: 0 4px 32px rgba(0,0,0,.2);
+    }
+
+    /* ── Header ────────────────────────────────────────────── */
+    .header {
+      background: linear-gradient(135deg, var(--blue) 0%, var(--blue-mid) 100%);
+      color: var(--white);
+      padding: 9px 18px 7px;
+      position: relative;
+      border-bottom: 4px solid var(--accent);
+    }
+    .header::after {
+      content: '';
+      position: absolute;
+      bottom: -8px; left: 0; right: 0;
+      height: 4px;
+      background: var(--gold);
+    }
+
+    .institution {
+      font-size: .9rem;
+      font-weight: 500;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      opacity: .75;
+      margin-bottom: 3px;
+    }
+
+    .title {
+      font-size: 1.9rem;
+      font-weight: 800;
+      line-height: 1.12;
+      letter-spacing: -.01em;
+      margin-bottom: 5px;
+    }
+    .title span { color: var(--gold); }
+
+    .authors {
+      font-size: 1rem;
+      opacity: .88;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      align-items: center;
+    }
+    .author-name {
+      background: rgba(255,255,255,.15);
+      border-radius: 20px;
+      padding: 2px 10px;
+      font-weight: 600;
+    }
+    .author-sep { opacity: .45; }
+
+    /* ── Two-col row: questions + stats ────────────────────── */
+    .row-qf {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    /* Research Questions */
+    .questions {
+      padding: 7px 16px;
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .section-label {
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      color: var(--blue-mid);
+      margin-bottom: 7px;
+    }
+    .question-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .question-list li {
+      display: flex;
+      align-items: flex-start;
+      gap: 7px;
+      font-size: .82rem;
+      line-height: 1.35;
+    }
+    .q-num {
+      flex-shrink: 0;
+      width: 20px; height: 20px;
+      border-radius: 50%;
+      background: var(--blue-mid);
+      color: var(--white);
+      font-size: .75rem;
+      font-weight: 700;
+      display: flex; align-items: center; justify-content: center;
+      margin-top: 1px;
+    }
+
+    /* Key Findings */
+    .findings {
+      padding: 7px 16px;
+      background: var(--white);
+    }
+    .stat-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 6px;
+      margin-top: 6px;
+    }
+    .stat-card {
+      background: var(--blue-light);
+      border-radius: var(--radius);
+      padding: 7px 10px;
+      border-left: 3px solid var(--blue-mid);
+    }
+    .stat-card.accent { border-left-color: var(--accent); background: #fdf0ec; }
+    .stat-card.gold   { border-left-color: var(--gold);   background: #fdf8ec; }
+    .stat-value {
+      font-size: 1.45rem;
+      font-weight: 800;
+      color: var(--blue);
+      line-height: 1;
+    }
+    .stat-card.accent .stat-value { color: var(--accent); }
+    .stat-card.gold   .stat-value { color: #b87a00; }
+    .stat-label {
+      font-size: .72rem;
+      color: var(--muted);
+      margin-top: 2px;
+      line-height: 1.3;
+    }
+
+    /* Pass-rate bar */
+    .passrate-block {
+      margin-top: 5px;
+      background: var(--bg);
+      border-radius: var(--radius);
+      padding: 5px 10px;
+    }
+    .passrate-title {
+      font-size: .72rem;
+      font-weight: 700;
+      color: var(--blue-mid);
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 5px;
+    }
+    .passrate-bars {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .pr-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .78rem;
+    }
+    .pr-label {
+      flex: 0 0 60px;
+      font-weight: 600;
+      color: var(--muted);
+    }
+    .pr-bar-wrap {
+      flex: 1;
+      height: 12px;
+      background: var(--border);
+      border-radius: 6px;
+      overflow: hidden;
+    }
+    .pr-bar {
+      height: 100%;
+      border-radius: 6px;
+      background: linear-gradient(90deg, var(--blue-mid), var(--accent));
+    }
+    .pr-val {
+      flex: 0 0 32px;
+      font-weight: 700;
+      text-align: right;
+      color: var(--text);
+    }
+
+    /* ── Image grid ─────────────────────────────────────────── */
+    .img-section {
+      padding: 6px 14px;
+      background: var(--white);
+      border-bottom: 1px solid var(--border);
+    }
+    .img-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 5px;
+      margin-top: 5px;
+    }
+    .img-wrap {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+    }
+    .img-annotation {
+      font-size: .64rem;
+      color: var(--muted);
+      font-style: italic;
+      line-height: 1.35;
+      padding: 0 2px;
+    }
+    .img-cell {
+      position: relative;
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1.5px solid var(--border);
+      background: #ffffff;
+      aspect-ratio: 16 / 9;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .img-cell img {
+      position: absolute;
+      inset: 0;
+      width: 100%; height: 100%;
+      object-fit: contain;
+      display: block;
+    }
+    .img-caption {
+      position: absolute;
+      bottom: 0; left: 0; right: 0;
+      background: rgba(26,58,107,.82);
+      color: var(--white);
+      font-size: .65rem;
+      font-weight: 600;
+      text-align: center;
+      padding: 3px 4px;
+      letter-spacing: .04em;
+    }
+    /* Placeholder state (shown when img src is missing / broken) */
+    .img-placeholder {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 4px;
+      width: 100%; height: 100%;
+    }
+    .img-placeholder svg { opacity: .3; }
+    .img-placeholder span {
+      font-size: .65rem;
+      color: var(--muted);
+      text-align: center;
+      padding: 0 6px;
+    }
+
+    /* ── COVID lens strip ──────────────────────────────────── */
+    .covid-strip {
+      background: #f3f0fc;
+      color: var(--text);
+      padding: 6px 14px 6px 16px;
+      border-top: 1px solid #ddd6fe;
+      border-bottom: 1px solid #ddd6fe;
+      border-left: 4px solid #7c3aed;
+    }
+    .covid-strip .section-label {
+      color: #6d28d9;
+      margin-bottom: 7px;
+    }
+    .covid-inner {
+      display: grid;
+      grid-template-columns: 1fr 1px 1fr 1px 1fr;
+      align-items: start;
+      gap: 10px;
+    }
+    .covid-divider {
+      background: #ddd6fe;
+      align-self: stretch;
+    }
+    .covid-footer {
+      margin-top: 7px;
+      font-size: .75rem;
+      color: var(--muted);
+      font-style: italic;
+    }
+    .covid-footer strong { color: #6d28d9; font-style: normal; }
+    .covid-col {
+      display: flex;
+      flex-direction: column;
+      gap: 5px;
+    }
+    .covid-col-title {
+      font-size: .72rem;
+      font-weight: 700;
+      letter-spacing: .06em;
+      text-transform: uppercase;
+      margin-bottom: 2px;
+    }
+    .covid-col-title.danger  { color: #dc2626; }
+    .covid-col-title.neutral { color: #b45309; }
+    .covid-col-title.safe    { color: #15803d; }
+    .covid-compare-row {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-size: .75rem;
+    }
+    .cmp-label {
+      flex: 0 0 44px;
+      color: var(--muted);
+      font-weight: 600;
+      font-size: .7rem;
+    }
+    .cmp-bar-wrap {
+      flex: 1;
+      height: 10px;
+      background: #e5e7eb;
+      border-radius: 5px;
+      overflow: hidden;
+      position: relative;
+    }
+    .cmp-bar {
+      height: 100%;
+      border-radius: 5px;
+      position: absolute;
+      top: 0; left: 0;
+    }
+    .cmp-bar.overall    { background: #a5b4fc; }
+    .cmp-bar.covid      { background: #f87171; }
+    .cmp-bar.covid-neutral { background: #fbbf24; }
+    .cmp-bar.covid-safe    { background: #4ade80; }
+    .cmp-val {
+      flex: 0 0 34px;
+      font-weight: 700;
+      text-align: right;
+      font-size: .78rem;
+      color: var(--text);
+    }
+    .cmp-val.down { color: #dc2626; }
+    .cmp-val.up   { color: #15803d; }
+    /* covid-conclusion removed — replaced by .covid-footer below the grid */
+
+    /* ── Bottom row: methods + conclusion ───────────────────── */
+    .row-mc {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 0;
+      border-bottom: 1px solid var(--border);
+    }
+    .methods {
+      padding: 6px 16px;
+      border-right: 1px solid var(--border);
+      background: var(--bg);
+    }
+    .conclusion {
+      padding: 6px 16px;
+      background: var(--blue);
+      color: var(--white);
+    }
+    .conclusion .section-label { color: var(--gold); }
+    .body-text {
+      font-size: .82rem;
+      line-height: 1.5;
+      color: var(--muted);
+    }
+    .conclusion .body-text {
+      color: rgba(255,255,255,.88);
+    }
+    .conclusion .highlight {
+      color: var(--gold);
+      font-weight: 700;
+    }
+
+    /* ── Footer ────────────────────────────────────────────── */
+    .footer {
+      background: var(--text);
+      color: rgba(255,255,255,.65);
+      padding: 6px 18px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: .72rem;
+    }
+    .footer a { color: var(--gold); text-decoration: none; }
+
+    /* ── Print overrides ───────────────────────────────────── */
+    @page { size: A4 portrait; margin: 0; }
+    @media print {
+      body { background: none; padding: 0; }
+      .poster {
+        width: 210mm;
+        min-height: 297mm;
+        box-shadow: none;
+        page-break-inside: avoid;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<article class="poster">
+
+  <!-- ══ HEADER ═══════════════════════════════════════════════ -->
+  <header class="header">
+    <div class="institution">[ University of West Bohemia / Faculty of Applied Sciences ]</div>
+    <h1 class="title">
+      Does <span>Showing Up</span> Matter?<br>
+      Lecture Attendance &amp; Academic Outcomes Across 15&nbsp;Years
+    </h1>
+    <div class="authors">
+      <span class="author-name">Trong Quoc Huy Dinh</span>
+      <span class="author-sep">·</span>
+      <span class="author-name">Martin Reich</span>
+      <span class="author-sep">·</span>
+      <span class="author-name">Eliška Toncarová</span>
+    </div>
+  </header>
+
+  <!-- ══ QUESTIONS + FINDINGS ══════════════════════════════════ -->
+  <div class="row-qf">
+
+    <!-- Research Questions -->
+    <section class="questions">
+      <div class="section-label">Research Questions</div>
+      <ul class="question-list">
+        <li>
+          <span class="q-num">1</span>
+          <span>Does lecture attendance predict final grade and total exam points?</span>
+        </li>
+        <li>
+          <span class="q-num">2</span>
+          <span>Do lower-attending students require more exam attempts to pass?</span>
+        </li>
+        <li>
+          <span class="q-num">3</span>
+          <span>Is there an attendance threshold above which pass rates become near-universal?</span>
+        </li>
+        <li>
+          <span class="q-num">4</span>
+          <span>How is attendance distributed across the student population, and what does the full attendance → attempts → grade pathway look like?</span>
+        </li>
+      </ul>
+    </section>
+
+    <!-- Key Findings -->
+    <section class="findings">
+      <div class="section-label">Key Findings at a Glance</div>
+
+      <div class="stat-grid">
+        <div class="stat-card">
+          <div class="stat-value">2 740</div>
+          <div class="stat-label">Students · AY 2010/11–2024/25</div>
+        </div>
+        <div class="stat-card accent">
+          <div class="stat-value">r ≈ 0.39</div>
+          <div class="stat-label">Attendance vs. final points (Pearson)</div>
+        </div>
+        <div class="stat-card gold">
+          <div class="stat-value">55 → 99 %</div>
+          <div class="stat-label">Pass rate range (lowest → highest bracket)</div>
+        </div>
+        <div class="stat-card">
+          <div class="stat-value">13</div>
+          <div class="stat-label">Weeks tracked per semester</div>
+        </div>
+      </div>
+
+      <div class="passrate-block">
+        <div class="passrate-title">Pass Rate by Attendance Bracket</div>
+        <div class="passrate-bars">
+          <div class="pr-row">
+            <span class="pr-label">0–3 wks</span>
+            <div class="pr-bar-wrap"><div class="pr-bar" style="width:55%"></div></div>
+            <span class="pr-val">55 %</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-label">4–6 wks</span>
+            <div class="pr-bar-wrap"><div class="pr-bar" style="width:91%"></div></div>
+            <span class="pr-val">91 %</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-label">7–9 wks</span>
+            <div class="pr-bar-wrap"><div class="pr-bar" style="width:95%"></div></div>
+            <span class="pr-val">95 %</span>
+          </div>
+          <div class="pr-row">
+            <span class="pr-label">10–13 wks</span>
+            <div class="pr-bar-wrap"><div class="pr-bar" style="width:99%"></div></div>
+            <span class="pr-val">99 %</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div><!-- /row-qf -->
+
+  <!-- ══ COVID LENS STRIP ══════════════════════════════════════ -->
+  <section class="covid-strip">
+    <div class="section-label">COVID-19 Lens — Remote Delivery Period &nbsp;·&nbsp; AY 2019/20 &amp; 2020/21 &nbsp;·&nbsp; 352 students &nbsp;·&nbsp; avg 6.09 / 13 lectures</div>
+    <div class="covid-inner">
+
+      <!-- Low attenders comparison -->
+      <div class="covid-col">
+        <div class="covid-col-title danger">Low attenders (0–3 weeks) — hit hardest</div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">Normal yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar overall" style="width:55%"></div>
+          </div>
+          <span class="cmp-val">55 %</span>
+        </div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">COVID yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar covid" style="width:38%"></div>
+          </div>
+          <span class="cmp-val down">38 %</span>
+        </div>
+        <div style="font-size:.68rem;color:#dc2626;margin-top:2px;">Pass rate fell 17 percentage points</div>
+      </div>
+
+      <div class="covid-divider"></div>
+
+      <!-- Medium attenders comparison (4–9 weeks) -->
+      <div class="covid-col">
+        <div class="covid-col-title neutral">Medium attenders (4–9 weeks) — stable</div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">Normal yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar overall" style="width:93%"></div>
+          </div>
+          <span class="cmp-val">~93 %</span>
+        </div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">COVID yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar covid-neutral" style="width:96%"></div>
+          </div>
+          <span class="cmp-val up">~96 %</span>
+        </div>
+        <div style="font-size:.68rem;color:#b45309;margin-top:2px;">Marginally improved — no disruption</div>
+      </div>
+
+      <div class="covid-divider"></div>
+
+      <!-- High attenders comparison (10–13 weeks) -->
+      <div class="covid-col">
+        <div class="covid-col-title safe">High attenders (10–13 weeks) — unaffected</div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">Normal yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar overall" style="width:99%"></div>
+          </div>
+          <span class="cmp-val">99 %</span>
+        </div>
+        <div class="covid-compare-row">
+          <span class="cmp-label">COVID yrs</span>
+          <div class="cmp-bar-wrap">
+            <div class="cmp-bar covid-safe" style="width:98%"></div>
+          </div>
+          <span class="cmp-val up">98 %</span>
+        </div>
+        <div style="font-size:.68rem;color:#15803d;margin-top:2px;">Virtually identical — COVID had no effect</div>
+      </div>
+
+    </div>
+    <p class="covid-footer">
+      Only <strong>low attenders (0–3 weeks)</strong> suffered during COVID — pass rate fell 17 percentage points.
+      Medium and high attenders were unaffected or marginally improved, confirming that <strong>consistent engagement protects outcomes</strong> even under extreme disruption.
+    </p>
+  </section>
+
+  <!-- ══ IMAGE GRID ════════════════════════════════════════════ -->
+  <section class="img-section">
+    <div class="section-label">Visualisations</div>
+    <div class="img-grid">
+
+      <!-- Fig 1 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_grade.png"
+               alt="Attendance vs Final Grade"
+               onerror="this.style.display='none'" />
+          <div class="img-caption">Fig 1 · Attendance vs Final Grade</div>
+        </div>
+        <p class="img-annotation">Higher-graded students consistently attended more lectures — grade 1 students averaged 3+ more weeks than failing students.</p>
+      </div>
+
+      <!-- Fig 2 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_distribution.png"
+               alt="Attendance Distribution"
+               onerror="this.style.display='none'" /> 
+          <div class="img-caption">Fig 2 · Attendance Distribution</div>
+        </div>
+        <p class="img-annotation">Most students cluster around 6–10 attended weeks; a long tail of near-zero attenders represents the at-risk group.</p>
+      </div>
+
+      <!-- Fig 3 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_attempts.png"
+               alt="Exam Attempts vs Attendance"
+               onerror="this.style.display='none'" />
+          <div class="img-caption">Fig 3 · Exam Attempts vs Attendance</div>
+        </div>
+        <p class="img-annotation">Students who needed multiple exam attempts attended fewer lectures on average than first-attempt passers.</p>
+      </div>
+
+      <!-- Fig 4 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_passrate.png"
+               alt="Pass Rate by Attendance Bracket"
+               onerror="this.style.display='none'" />
+          <div class="img-caption">Fig 4 · Pass Rate by Attendance Bracket</div>
+        </div>
+        <p class="img-annotation">Pass rate rises steeply from 55 % (0–3 weeks) to 99 % (10–13 weeks) — the clearest single finding in the dataset.</p>
+      </div>
+
+      <!-- Fig 5 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_points.png"
+               alt="Final Points vs Attendance (OLS)"
+               onerror="this.style.display='none'" />
+          <div class="img-caption">Fig 5 · Final Points vs Attendance (OLS)</div>
+        </div>
+        <p class="img-annotation">OLS trendline (r ≈ 0.39) confirms a moderate positive linear relationship between attendance and final score.</p>
+      </div>
+
+      <!-- Fig 6 -->
+      <div class="img-wrap">
+        <div class="img-cell">
+          <img src="assets/fig_sankey.png"
+               alt="Sankey: Attendance → Attempts → Grade"
+               onerror="this.style.display='none'" />
+          <div class="img-caption">Fig 6 · Sankey: Attendance → Attempts → Grade</div>
+        </div>
+        <p class="img-annotation">Flow diagram tracing students from attendance bracket through exam attempts to final grade — low attenders dominate the failure stream.</p>
+      </div>
+
+    </div><!-- /img-grid -->
+  </section>
+
+  <!-- ══ METHODS + CONCLUSION ═══════════════════════════════════ -->
+  <div class="row-mc">
+
+    <section class="methods">
+      <div class="section-label">Data &amp; Methods</div>
+      <p class="body-text">
+        Retrospective analysis of 2 943 student records across 14 academic years (2010/11–2024/25)
+        from university course registers. Attendance was recorded weekly (0–13 lectures);
+        outcomes include final grade (1–4, S, N), total points, and number of exam attempts.
+        Statistical analysis: descriptive statistics, Pearson correlation (attendance vs. points),
+        and pass-rate stratification by attendance bracket. Visualised with an interactive Plotly/Dash dashboard.
+      </p>
+    </section>
+
+    <section class="conclusion">
+      <div class="section-label">Conclusion</div>
+      <p class="body-text">
+        Attendance is a <span class="highlight">strong predictor</span> of academic success.
+        Students attending 4 or more lectures already show a
+        <span class="highlight">pass rate above 90 %</span>, rising to near-certainty at
+        10+ weeks. The moderate positive correlation (<span class="highlight">r ≈ 0.39</span>)
+        between attendance and final points confirms that consistent presence — not just talent —
+        drives outcomes. These findings advocate for <span class="highlight">early-warning
+        interventions</span> targeting students absent in the first 3 weeks.
+      </p>
+    </section>
+
+  </div><!-- /row-mc -->
+
+  <!-- ══ FOOTER ═════════════════════════════════════════════════ -->
+  <footer class="footer">
+    <span>
+      Dashboard &amp; data:
+      <a href="https://github.com/trongquochuydinh/VI_SP" target="_blank">
+        github.com/trongquochuydinh/VI_SP
+      </a>
+    </span>
+    <span>Attendance Operational Dashboard · 2026</span>
+  </footer>
+
+</article>
+</body>
+</html>
