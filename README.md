@@ -44,7 +44,7 @@ When the view is switched, the chart type, academic year, exam-attempt, and clas
 
 "Largest class" is recomputed from the loaded data, so it adapts to whatever dataset is dropped in.
 
-## Architecture
+## Architecture in `src`
 
 - `run.py`: entry point for local run.
 - `app.py`: creates Dash app and wires layout + callbacks.
@@ -76,7 +76,7 @@ pip install -r requirements.txt
 4. Start the app (ensure `attendance_merged_evaluated_only.xlsx` is in the project root if you want live data; see **Data Source** above):
 
 ```bash
-python run.py
+python src/run.py
 ```
 
 Then open the local Dash URL shown in your terminal.
