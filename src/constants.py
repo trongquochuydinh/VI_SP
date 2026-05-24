@@ -54,7 +54,7 @@ CHART_TYPE_OPTIONS = [
 ]
 
 # Define default data file and sheet name
-DEFAULT_DATA_FILE = "attendance_merged_evaluated_only.xlsx"
+DEFAULT_DATA_FILE = "bin/attendance_merged_evaluated_only.xlsx"
 DEFAULT_SHEET_NAME = "attendance"
 
 # Define layout constant
